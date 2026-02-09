@@ -107,16 +107,22 @@ exports.getAttenderStatus = async (req, res) => {
  */
 exports.getSeatMap = async (req, res) => {
     try {
-        const Seat = require('../models/Seat');
-        const seats = await Seat.find({ busId: req.params.id }).sort({ seatNumber: 1 });
+        const bus = await Bus.findOne({ busId: req.params.id }).select('busId capacity seatStates');
+
+        if (!bus) {
+            return res.status(404).json({
+                success: false,
+                message: 'Bus not found'
+            });
+        }
 
         res.json({
             success: true,
             data: {
-                busId: req.params.id,
-                totalSeats: 40,
+                busId: bus.busId,
+                totalSeats: bus.capacity,
                 layout: '2-2',
-                seats: seats
+                seats: bus.seatStates || []
             }
         });
     } catch (error) {
@@ -127,3 +133,82 @@ exports.getSeatMap = async (req, res) => {
         });
     }
 };
+
+/**
+ * Get seats for a specific bus (seatStates only)
+ */
+exports.getSeatsForBus = async (req, res) => {
+    try {
+        const bus = await Bus.findOne({ busId: req.params.id }).select('seatStates capacity');
+
+        if (!bus) {
+            return res.status(404).json({
+                success: false,
+                message: 'Bus not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: {
+                seats: bus.seatStates || [],
+                capacity: bus.capacity
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching seats:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch seats'
+        });
+    }
+};
+
+/**
+ * Update bus snapshot (for IoT devices or simulator)
+ */
+exports.updateSnapshot = async (req, res) => {
+    try {
+        const { busId, seatStates, gpsLocation, passengerCount } = req.body;
+
+        if (!busId) {
+            return res.status(400).json({
+                success: false,
+                message: 'busId is required'
+            });
+        }
+
+        const bus = await Bus.findOne({ busId });
+
+        if (!bus) {
+            return res.status(404).json({
+                success: false,
+                message: 'Bus not found'
+            });
+        }
+
+        // Update fields
+        const updateData = { lastUpdated: new Date() };
+
+        if (seatStates) updateData.seatStates = seatStates;
+        if (gpsLocation) {
+            updateData.gpsLocation = gpsLocation;
+            updateData.currentLocation = gpsLocation;
+        }
+        if (passengerCount !== undefined) updateData.passengerCount = passengerCount;
+
+        await Bus.findOneAndUpdate({ busId }, updateData);
+
+        res.json({
+            success: true,
+            message: 'Bus snapshot updated successfully'
+        });
+    } catch (error) {
+        console.error('Error updating snapshot:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update snapshot'
+        });
+    }
+};
+

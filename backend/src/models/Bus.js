@@ -23,6 +23,14 @@ const busSchema = new mongoose.Schema({
         lat: Number,
         lng: Number
     },
+    speed: {
+        type: Number,
+        default: 0
+    },
+    heading: {
+        type: Number,
+        default: 0
+    },
     currentLocation: {
         lat: Number,
         lng: Number
@@ -67,6 +75,18 @@ const busSchema = new mongoose.Schema({
         type: Number,
         default: 40
     },
+    // Seat states array for real-time simulation
+    seatStates: [{
+        seatNumber: {
+            type: Number,
+            required: true
+        },
+        state: {
+            type: String,
+            enum: ['HUMAN', 'LUGGAGE', 'EMPTY'],
+            default: 'EMPTY'
+        }
+    }],
     lastUpdated: {
         type: Date,
         default: Date.now

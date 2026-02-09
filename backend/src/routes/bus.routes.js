@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const busController = require('../controllers/busController');
+const gpsController = require('../controllers/gpsController');
 const auth = require('../middleware/auth');
 const requireRole = require('../middleware/requireRole');
 
@@ -40,6 +41,13 @@ router.get('/:id/attender', auth, requireRole(['ADMIN']), busController.getAtten
 router.get('/:id/seat-map', auth, requireRole(['ADMIN']), busController.getSeatMap);
 
 /**
+ * @route   GET /api/bus/:id/seats
+ * @desc    Get seats for a specific bus
+ * @access  Admin
+ */
+router.get('/:id/seats', auth, requireRole(['ADMIN']), busController.getSeatsForBus);
+
+/**
  * @route   GET /api/bus/status (legacy endpoint)
  * @desc    Get first bus status
  * @access  Authenticated
@@ -55,33 +63,17 @@ router.get('/status', auth, async (req, res) => {
 });
 
 /**
- * @route   GET /api/bus/seats (legacy endpoint)
- * @desc    Get seats for first bus
- * @access  Authenticated
+ * @route   POST /api/bus/location
+ * @desc    Update GPS location from mobile phone
+ * @access  Admin (driver)
  */
-router.get('/seats', auth, async (req, res) => {
-    try {
-        const Seat = require('../models/Seat');
-        const seats = await Seat.find();
-        res.json({ success: true, data: seats });
-    } catch (error) {
-        res.status(500).json({ success: false, message: 'Failed to fetch seats' });
-    }
-});
+router.post('/location', auth, requireRole(['ADMIN']), gpsController.updateLocation);
 
 /**
  * @route   POST /api/bus/snapshot
- * @desc    ESP32 pushes live data
+ * @desc    ESP32 or simulator pushes live data
  * @access  Public (IoT device)
  */
-router.post('/snapshot', async (req, res) => {
-    try {
-        // Handle IoT data push
-        console.log('Snapshot received:', req.body);
-        res.json({ success: true, message: 'Snapshot received' });
-    } catch (error) {
-        res.status(500).json({ success: false, message: 'Failed to process snapshot' });
-    }
-});
+router.post('/snapshot', busController.updateSnapshot);
 
 module.exports = router;

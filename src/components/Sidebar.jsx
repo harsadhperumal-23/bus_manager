@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Bus, Activity, BarChart3, Armchair, FileText, MapPin, Clock, Users } from 'lucide-react';
+import { Bus, Activity, BarChart3, Armchair, FileText, MapPin, Clock, Users, Navigation } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const Sidebar = () => {
@@ -20,6 +20,7 @@ const Sidebar = () => {
         { path: '/operations', icon: Activity, label: 'Operations', description: 'Real-time bus monitoring' },
         { path: '/performance', icon: BarChart3, label: 'Performance', description: 'Performance metrics' },
         { path: '/analytics', icon: Armchair, label: 'Analytics', description: 'Analytics dashboard' },
+        { path: '/driver-tracker', icon: Navigation, label: 'Driver Tracker', description: 'GPS tracking for drivers' },
         { path: '/access-logs', icon: FileText, label: 'Access Logs', description: 'System access logs (Admin only)' },
     ];
 

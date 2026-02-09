@@ -5,65 +5,101 @@ import BusMap from '../components/BusMap';
 import LiveAlertFeed from '../components/LiveAlertFeed';
 import SeatGrid from '../components/SeatGrid';
 import useAlertNotifications from '../hooks/useAlertNotifications';
-import {
-    generateBusMetrics,
-    updateBusPosition,
-    getCurrentBusPosition,
-    getRecentAlerts,
-    getSeatData,
-} from '../services/mockDataService';
+
+const API_BASE_URL = 'http://localhost:5000/api';
 
 const Operations = () => {
     const [selectedBus, setSelectedBus] = useState('BUS-001');
     const [availableBuses] = useState(['BUS-001', 'BUS-002', 'BUS-003']);
-    const [metrics, setMetrics] = useState(null);
-    const [busPosition, setBusPosition] = useState(getCurrentBusPosition());
-    const [alerts, setAlerts] = useState([]);
+    const [busData, setBusData] = useState(null);
     const [seats, setSeats] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-
-    // Mock driver and attender data
-    const [driverStatus] = useState({
-        name: 'Ramesh Kumar',
-        present: true,
-        lastSeen: new Date(),
-        location: 'Driver Seat'
-    });
-
-    const [attenderStatus] = useState({
-        name: 'Suresh Babu',
-        present: true,
-        lastSeen: new Date(),
-        location: 'Middle aisle'
-    });
+    const [isSwitching, setIsSwitching] = useState(false);
 
     // Enable alert notifications
-    useAlertNotifications(alerts);
+    useAlertNotifications([]);
 
+    // Fetch bus data from API
+    const fetchBusData = async (busId) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/bus/${busId}`, {
+                credentials: 'include'
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to fetch bus data');
+            }
+
+            const result = await response.json();
+            if (result.success) {
+                setBusData(result.data);
+            }
+        } catch (error) {
+            console.error('Error fetching bus data:', error);
+        }
+    };
+
+    // Fetch seat data from API
+    const fetchSeatData = async (busId) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/bus/${busId}/seat-map`, {
+                credentials: 'include'
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to fetch seat data');
+            }
+
+            const result = await response.json();
+            if (result.success && result.data.seats) {
+                console.log('📊 Raw seat data from API:', result.data.seats);
+
+                // Transform seat data to match SeatGrid component expectations
+                // Backend sends: { seatNumber, state: "HUMAN" | "LUGGAGE" | "VACANT" }
+                // Frontend needs: { number, occupied: boolean, hasLuggage: boolean }
+                const transformedSeats = result.data.seats.map(seat => {
+                    const seatData = {
+                        id: seat.seatNumber,
+                        number: seat.seatNumber,
+                        occupied: seat.state === 'HUMAN' || seat.state === 'LUGGAGE',
+                        hasLuggage: seat.state === 'LUGGAGE',
+                        passengerCount: seat.state === 'HUMAN' ? 1 : 0,
+                        row: Math.floor((seat.seatNumber - 1) / 4) + 1,
+                        position: ['A', 'B', 'C', 'D'][(seat.seatNumber - 1) % 4],
+                        lastUpdated: new Date().toISOString()
+                    };
+                    return seatData;
+                });
+
+                console.log('✅ Transformed seat data:', transformedSeats);
+                setSeats(transformedSeats);
+            } else {
+                console.warn('⚠️ No seat data received from API');
+                setSeats([]);
+            }
+        } catch (error) {
+            console.error('❌ Error fetching seat data:', error);
+        }
+    };
+
+    // Initial load and polling
     useEffect(() => {
-        // Initial load
-        setTimeout(() => {
-            const data = generateBusMetrics();
-            setMetrics(data);
-            setAlerts(getRecentAlerts());
-            setSeats(getSeatData());
+        const loadData = async () => {
+            setIsLoading(true);
+            await Promise.all([
+                fetchBusData(selectedBus),
+                fetchSeatData(selectedBus)
+            ]);
             setIsLoading(false);
-        }, 1000);
+            setIsSwitching(false);
+        };
 
-        // Polling every 3 seconds
+        loadData();
+
+        // Poll every 3 seconds
         const interval = setInterval(() => {
-            const data = generateBusMetrics();
-            setMetrics(data);
-
-            // Update bus position
-            const newPosition = updateBusPosition();
-            setBusPosition(newPosition);
-
-            // Update alerts
-            setAlerts(getRecentAlerts());
-
-            // Update seat data
-            setSeats(getSeatData());
+            fetchBusData(selectedBus);
+            fetchSeatData(selectedBus);
         }, 3000);
 
         return () => clearInterval(interval);
@@ -72,6 +108,35 @@ const Operations = () => {
     const handleSeatClick = (seat) => {
         console.log('Seat clicked:', seat);
     };
+
+    // Extract data from busData with safety checks
+    const driverStatus = busData?.driverStatus
+        ? {
+            name: busData.driverStatus.name || 'Unknown Driver',
+            present: busData.driverStatus.present || false,
+            location: busData.driverStatus.location || 'N/A'
+        }
+        : { name: 'Unknown Driver', present: false, location: 'N/A' };
+
+    const attenderStatus = busData?.attenderStatus
+        ? {
+            name: busData.attenderStatus.name || 'Unknown Attender',
+            present: busData.attenderStatus.present || false,
+            location: busData.attenderStatus.location || 'N/A'
+        }
+        : { name: 'Unknown Attender', present: false, location: 'N/A' };
+
+    const metrics = {
+        totalPassengers: busData?.humanCount || 0,
+        occupiedSeats: busData?.seatStates?.filter(s => s.state === 'occupied').length || 0,
+        luggageAlerts: busData?.luggageCount || 0
+    };
+
+    const busPosition = busData?.gpsLocation
+        ? { lat: busData.gpsLocation.lat, lng: busData.gpsLocation.lng }
+        : null;
+
+    const alerts = busData?.alerts || [];
 
     return (
         <div className="space-y-6" id="main-content">
@@ -122,8 +187,8 @@ const Operations = () => {
                         <div className="flex justify-between items-center">
                             <span className="text-slate-400 light:text-slate-600">Status</span>
                             <span className={`px-3 py-1 rounded-full text-sm font-semibold ${driverStatus.present
-                                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                    : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                : 'bg-red-500/20 text-red-400 border border-red-500/30'
                                 }`}>
                                 {driverStatus.present ? 'Present' : 'Absent'}
                             </span>
@@ -154,8 +219,8 @@ const Operations = () => {
                         <div className="flex justify-between items-center">
                             <span className="text-slate-400 light:text-slate-600">Status</span>
                             <span className={`px-3 py-1 rounded-full text-sm font-semibold ${attenderStatus.present
-                                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                    : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                : 'bg-red-500/20 text-red-400 border border-red-500/30'
                                 }`}>
                                 {attenderStatus.present ? 'Present' : 'Absent'}
                             </span>
@@ -204,14 +269,27 @@ const Operations = () => {
 
             {/* Seat Occupancy Grid with Legend */}
             <div>
-                <SeatGrid seats={seats} onSeatClick={handleSeatClick} />
+                {isLoading || seats.length === 0 ? (
+                    <div className="glass-card rounded-xl p-12 text-center">
+                        <div className="animate-pulse">
+                            <div className="text-2xl font-bold text-white light:text-slate-900 mb-2">
+                                🚌 Connecting to Bus...
+                            </div>
+                            <p className="text-slate-400 light:text-slate-600">
+                                Loading seat data from {selectedBus}
+                            </p>
+                        </div>
+                    </div>
+                ) : (
+                    <SeatGrid seats={seats} onSeatClick={handleSeatClick} />
+                )}
             </div>
 
             {/* Map and Alerts Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[500px]">
                 {/* Map - Takes 2 columns */}
                 <div className="lg:col-span-2 h-full">
-                    <BusMap currentPosition={busPosition} />
+                    <BusMap currentPosition={busPosition} busData={busData} />
                 </div>
 
                 {/* Live Alert Feed - Takes 1 column */}

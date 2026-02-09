@@ -5,6 +5,7 @@ const session = require('express-session');
 const morgan = require('morgan');
 const connectDB = require('./config/db');
 const logAccess = require('./middleware/logAccess');
+const { seedBuses, startGlobalSimulation } = require('./simulator');
 
 // Import routes
 const authRoutes = require('./routes/auth.routes');
@@ -17,8 +18,16 @@ const seedRoutes = require('./routes/seed.routes');
 // Initialize Express app
 const app = express();
 
-// Connect to MongoDB
-connectDB();
+// Connect to MongoDB and start simulator
+connectDB().then(async () => {
+    console.log('🔧 Initializing multi-bus simulation...');
+    try {
+        await seedBuses();
+        startGlobalSimulation();
+    } catch (error) {
+        console.error('⚠️  Simulator initialization failed:', error.message);
+    }
+});
 
 // Middleware
 app.use(cors({
